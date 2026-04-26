@@ -1,5 +1,7 @@
 # ☁️ Cloud Cost Calculator
 **Note**: This project was done as a part of submission for the subject 'Sustainable Energy'.
+
+
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.0-0075AB?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
