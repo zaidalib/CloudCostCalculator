@@ -137,9 +137,7 @@ Sustainable Calculator/
 ├── app.py                      # Flask backend server
 ├── templates/
 │   └── index.html             # Single-page frontend application
-├── word.md                     # Project report/documentation
-├── Cloud_Cost_Calculator_Report.pdf    # Final report
-└── SE_Presentation.pdf         # Project presentation
+└── README.md         # This MD File
 ```
 
 ---
