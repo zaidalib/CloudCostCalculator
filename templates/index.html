@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Cost Calculator — AWS · Azure · GCP</title>
+    <meta name="description"
+        content="Simulate and compare infrastructure costs across AWS, Azure and GCP cloud providers with storage tiers and workload priority modes." />
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+        rel="stylesheet" />
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pageBg: '#f4f6f9',
+                        surface: '#ffffff',
+                        surfaceAlt: '#f0f2f5',
+                        border: '#dfe3ea',
+                        borderDark: '#c5ccd6',
+                        accent: '#0077ff',
+                        accentDark: '#005ecc',
+                        accentLight: '#e6f0ff',
+                        muted: '#6b7a8d',
+                        textBody: '#374151',
+                        textHeading: '#111827',
+                        awsOrange: '#FF9900',
+                        azureBlue: '#0089D6',
+                        gcpBlue: '#4285F4',
+                        warnRed: '#ef4444',
+                        warnRedLight: '#fef2f2',
+                        successGreen: '#10b981',
+                    },
+                    fontFamily: {
+                        heading: ['"Space Mono"', 'monospace'],
+                        data: ['"IBM Plex Mono"', 'monospace'],
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: 0, transform: 'translateY(20px)' },
+                            '100%': { opacity: 1, transform: 'translateY(0)' },
+                        },
+                        pulse2: {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: .7 },
+                        },
+                    },
+                    animation: {
+                        fadeInUp: 'fadeInUp .45s ease-out both',
+                        pulse2: 'pulse2 2.5s ease-in-out infinite',
+                    },
+                },
+            },
+        };
+    </script>
+
+    <style>
+        body {
+            background: #f4f6f9;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f0f2f5;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c5ccd6;
+            border-radius: 3px;
+        }
+
+        .glow-btn {
+            box-shadow: 0 0 0 3px rgba(0, 119, 255, .18);
+        }
+
+        .spinner {
+            border: 3px solid #dfe3ea;
+            border-top-color: #0077ff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin .6s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .card-hover {
+            transition: all .2s ease;
+        }
+
+        .card-hover:hover {
+            border-color: #0077ff44;
+            box-shadow: 0 4px 16px rgba(0, 119, 255, .08);
+            transform: translateY(-2px);
+        }
+
+        input[type=number]:focus,
+        select:focus {
+            outline: none;
+            border-color: #0077ff;
+            box-shadow: 0 0 0 3px rgba(0, 119, 255, .12);
+        }
+
+        input[type=number].error {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, .15) !important;
+        }
+
+        input[type=number]::-webkit-outer-spin-button,
+        input[type=number]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .highlight-card {
+            border-color: #f59e0b !important;
+            background: #fffbeb !important;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen text-textBody font-data antialiased">
+
+    <div class="max-w-[920px] mx-auto px-4 sm:px-6 py-10 sm:py-16">
+
+        <!-- ── HEADER ─────────────────────────────────────────────────────── -->
+        <header class="text-center mb-12">
+            <h1 class="font-heading text-3xl sm:text-4xl md:text-5xl font-bold tracking-widest text-textHeading">
+                CLOUD COST CALCULATOR
+            </h1>
+            <div class="h-[2px] w-28 mx-auto mt-4 bg-gradient-to-r from-transparent via-accent to-transparent"></div>
+            <p class="mt-4 text-gray-500 text-sm sm:text-[1rem] tracking-wide">
+                Simulate infrastructure costs across
+                <span class="font-bold" style="color:#FF9900">AWS</span>,
+                <span class="font-bold" style="color:#0089D6">Azure</span> &amp;
+                <span class="font-bold" style="color:#4285F4">GCP</span>
+            </p>
+        </header>
+
+        <!-- ── PROVIDER SELECTOR ──────────────────────────────────────────── -->
+        <div id="providerBtns" class="flex justify-center gap-3 sm:gap-4 mb-10">
+            <button data-provider="aws" class="provider-btn selected px-6 py-3 rounded-lg font-heading text-sm sm:text-[1rem] tracking-widest border-2 transition-all duration-200 cursor-pointer
+                   border-accent text-accent glow-btn bg-accentLight">
+                AWS
+            </button>
+            <button data-provider="azure" class="provider-btn px-6 py-3 rounded-lg font-heading text-sm sm:text-[1rem] tracking-widest border-2 transition-all duration-200 cursor-pointer
+                   border-gray-300 text-gray-500 bg-gray-50 hover:border-accent/50 hover:text-accent">
+                AZURE
+            </button>
+            <button data-provider="gcp" class="provider-btn px-6 py-3 rounded-lg font-heading text-sm sm:text-[1rem] tracking-widest border-2 transition-all duration-200 cursor-pointer
+                   border-gray-300 text-gray-500 bg-gray-50 hover:border-accent/50 hover:text-accent">
+                GCP
+            </button>
+        </div>
+
+        <!-- ── INPUT CARDS ────────────────────────────────────────────────── -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <!-- Storage -->
+            <div class="card-hover bg-surface border border-border rounded-xl p-5 shadow-sm">
+                <label class="block text-[11px] tracking-[.2em] text-muted mb-3 font-heading uppercase">Storage</label>
+                <div class="relative">
+                    <input id="storageInput" type="number" min="0" step="any" placeholder="0"
+                        class="w-full bg-surfaceAlt border border-border rounded-lg px-4 py-3 text-xl text-textHeading font-data placeholder:text-muted/40 transition-all duration-200" />
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted tracking-wide">GB /
+                        month</span>
+                </div>
+                <!-- Storage Tier Dropdown -->
+                <select id="storageTier"
+                    class="mt-3 w-full bg-surfaceAlt border border-border rounded-lg px-3 py-2 text-xs font-data text-textBody cursor-pointer transition-all duration-200">
+                </select>
+                <p class="text-[10px] tracking-[.15em] text-muted mt-1 font-heading uppercase">Storage Tier</p>
+                <p id="storageFormula" class="mt-2 text-[11px] text-muted font-data tracking-wide">
+                    GB × $<span class="rate">0.0230</span> = <span class="text-accent font-semibold">$0.00</span>
+                </p>
+            </div>
+            <!-- Compute -->
+            <div class="card-hover bg-surface border border-border rounded-xl p-5 shadow-sm">
+                <label class="block text-[11px] tracking-[.2em] text-muted mb-3 font-heading uppercase">Compute</label>
+                <div class="relative">
+                    <input id="computeInput" type="number" min="0" step="any" placeholder="0"
+                        class="w-full bg-surfaceAlt border border-border rounded-lg px-4 py-3 text-xl text-textHeading font-data placeholder:text-muted/40 transition-all duration-200" />
+                    <span
+                        class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted tracking-wide">Hours</span>
+                </div>
+                <p id="computeFormula" class="mt-3 text-[11px] text-muted font-data tracking-wide">
+                    hrs × $<span class="rate">0.0416</span> = <span class="text-accent font-semibold">$0.00</span>
+                </p>
+            </div>
+            <!-- Transfer -->
+            <div class="card-hover bg-surface border border-border rounded-xl p-5 shadow-sm">
+                <label class="block text-[11px] tracking-[.2em] text-muted mb-3 font-heading uppercase">Data
+                    Transfer</label>
+                <div class="relative">
+                    <input id="transferInput" type="number" min="0" step="any" placeholder="0"
+                        class="w-full bg-surfaceAlt border border-border rounded-lg px-4 py-3 text-xl text-textHeading font-data placeholder:text-muted/40 transition-all duration-200" />
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted tracking-wide">GB
+                        outbound</span>
+                </div>
+                <p id="transferFormula" class="mt-3 text-[11px] text-muted font-data tracking-wide">
+                    GB × $<span class="rate">0.0900</span> = <span class="text-accent font-semibold">$0.00</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- ── WORKLOAD PRIORITY ──────────────────────────────────────────── -->
+        <div class="bg-surface border border-border rounded-xl p-5 shadow-sm mb-6">
+            <label class="block text-[11px] tracking-[.2em] text-muted mb-4 font-heading uppercase">Workload
+                Priority</label>
+            <div id="priorityBtns" class="flex flex-wrap justify-center gap-3">
+                <button data-priority="balanced" class="priority-btn selected px-5 py-2.5 rounded-lg font-heading text-xs sm:text-sm tracking-widest border-2 transition-all duration-200 cursor-pointer
+                       border-accent text-accent glow-btn bg-accentLight">
+                    BALANCED
+                </button>
+                <button data-priority="storage" class="priority-btn px-5 py-2.5 rounded-lg font-heading text-xs sm:text-sm tracking-widest border-2 transition-all duration-200 cursor-pointer
+                       border-gray-300 text-gray-500 bg-gray-50 hover:border-accent/50 hover:text-accent">
+                    STORAGE HEAVY
+                </button>
+                <button data-priority="compute" class="priority-btn px-5 py-2.5 rounded-lg font-heading text-xs sm:text-sm tracking-widest border-2 transition-all duration-200 cursor-pointer
+                       border-gray-300 text-gray-500 bg-gray-50 hover:border-accent/50 hover:text-accent">
+                    COMPUTE HEAVY
+                </button>
+            </div>
+        </div>
+
+        <!-- ── CALCULATE BUTTON ───────────────────────────────────────────── -->
+        <button id="calcBtn"
+            class="w-full py-4 rounded-xl bg-accent text-white font-heading text-sm sm:text-[1rem] tracking-[.25em] font-bold
+               hover:bg-accentDark active:scale-[.98] transition-all duration-150 cursor-pointer shadow-md shadow-accent/20">
+            CALCULATE COSTS →
+        </button>
+
+        <!-- ── PRICING RATES COLLAPSIBLE ──────────────────────────────────── -->
+        <details class="mt-6 group">
+            <summary class="cursor-pointer text-[11px] tracking-[.18em] text-muted font-heading uppercase select-none
+                        hover:text-accent transition-colors duration-200 list-none flex items-center gap-2">
+                <svg class="w-3 h-3 transition-transform duration-200 group-open:rotate-90" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                VIEW PRICING RATES
+            </summary>
+            <div class="mt-3 overflow-x-auto bg-surface border border-border rounded-xl p-4 shadow-sm">
+                <table class="w-full text-xs font-data border-collapse">
+                    <thead>
+                        <tr class="text-muted border-b border-border">
+                            <th class="py-2 px-3 text-left tracking-wider">Provider</th>
+                            <th class="py-2 px-3 text-right tracking-wider">Storage (GB/mo)</th>
+                            <th class="py-2 px-3 text-right tracking-wider">Compute (hr)</th>
+                            <th class="py-2 px-3 text-right tracking-wider">Transfer (GB)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-textBody">
+                        <tr class="border-b border-border/50 hover:bg-surfaceAlt transition-colors">
+                            <td class="py-2 px-3 text-awsOrange font-semibold">AWS</td>
+                            <td class="py-2 px-3 text-right">$0.023 – $0.004</td>
+                            <td class="py-2 px-3 text-right">$0.0416</td>
+                            <td class="py-2 px-3 text-right">$0.0900</td>
+                        </tr>
+                        <tr class="border-b border-border/50 hover:bg-surfaceAlt transition-colors">
+                            <td class="py-2 px-3 text-azureBlue font-semibold">Azure</td>
+                            <td class="py-2 px-3 text-right">$0.0184 – $0.002</td>
+                            <td class="py-2 px-3 text-right">$0.0380</td>
+                            <td class="py-2 px-3 text-right">$0.0870</td>
+                        </tr>
+                        <tr class="hover:bg-surfaceAlt transition-colors">
+                            <td class="py-2 px-3 text-gcpBlue font-semibold">GCP</td>
+                            <td class="py-2 px-3 text-right">$0.020 – $0.004</td>
+                            <td class="py-2 px-3 text-right">$0.0350</td>
+                            <td class="py-2 px-3 text-right">$0.1200</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!--                      RESULTS SECTION                          -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <section id="results" class="hidden mt-14">
+
+            <!-- ── HEADING ────────────────────────────────────────────────── -->
+            <h2 id="resultsHeading" class="font-heading text-xs tracking-[.22em] text-muted uppercase mb-5">
+                Cost Breakdown — <span id="resultProvider" class="text-accent">AWS</span>
+            </h2>
+
+            <!-- ── COST BREAKDOWN METRICS ─────────────────────────────────── -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div id="cardStorage"
+                    class="bg-surface border border-border rounded-xl p-5 text-center shadow-sm animate-fadeInUp"
+                    style="animation-delay:.05s">
+                    <p class="text-[10px] tracking-[.2em] text-muted uppercase mb-1">Storage Cost</p>
+                    <p id="tierBadge"
+                        class="text-[9px] font-heading tracking-wider text-accent bg-accentLight inline-block px-2 py-0.5 rounded-full mb-2">
+                    </p>
+                    <p id="resStorage" class="text-2xl sm:text-3xl font-data font-bold text-accent">$0.00</p>
+                </div>
+                <div id="cardCompute"
+                    class="bg-surface border border-border rounded-xl p-5 text-center shadow-sm animate-fadeInUp"
+                    style="animation-delay:.12s">
+                    <p class="text-[10px] tracking-[.2em] text-muted uppercase mb-2">Compute Cost</p>
+                    <p id="resCompute" class="text-2xl sm:text-3xl font-data font-bold text-accent">$0.00</p>
+                </div>
+                <div id="cardTransfer"
+                    class="bg-surface border border-border rounded-xl p-5 text-center shadow-sm animate-fadeInUp"
+                    style="animation-delay:.19s">
+                    <p class="text-[10px] tracking-[.2em] text-muted uppercase mb-2">Transfer Cost</p>
+                    <p id="resTransfer" class="text-2xl sm:text-3xl font-data font-bold text-accent">$0.00</p>
+                </div>
+            </div>
+
+            <!-- ── TOTAL ──────────────────────────────────────────────────── -->
+            <div class="bg-surface border border-accent/20 rounded-2xl p-8 text-center mb-6 shadow-md shadow-accent/5 animate-fadeInUp"
+                style="animation-delay:.26s">
+                <p class="text-[10px] tracking-[.25em] text-muted uppercase mb-2">Estimated Monthly Total</p>
+                <p id="resTotal"
+                    class="text-4xl sm:text-5xl md:text-6xl font-data font-bold text-accent animate-pulse2">
+                    $0.00
+                </p>
+            </div>
+
+            <!-- ── RECOMMENDATION CARD ────────────────────────────────────── -->
+            <div id="recoCard" class="bg-surface border border-border rounded-xl p-5 mb-14 shadow-sm animate-fadeInUp"
+                style="animation-delay:.3s">
+                <p class="text-[10px] tracking-[.2em] text-muted uppercase mb-2 font-heading">💡 Recommendation</p>
+                <p id="recoText" class="text-sm text-textBody leading-relaxed"></p>
+                <p id="recoSavings" class="mt-2 text-sm font-semibold text-successGreen hidden"></p>
+            </div>
+
+            <!-- ── PROVIDER COMPARISON ────────────────────────────────────── -->
+            <h2 class="font-heading text-xs tracking-[.22em] text-muted uppercase mb-6">Provider Comparison</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <!-- Bar Chart -->
+                <div class="bg-surface border border-border rounded-xl p-5 shadow-sm animate-fadeInUp"
+                    style="animation-delay:.33s">
+                    <p class="text-[10px] tracking-[.18em] text-muted uppercase mb-4 font-heading">Cost Breakdown by
+                        Provider</p>
+                    <canvas id="barChart"></canvas>
+                </div>
+                <!-- Doughnut Chart -->
+                <div class="bg-surface border border-border rounded-xl p-5 shadow-sm animate-fadeInUp"
+                    style="animation-delay:.36s">
+                    <p class="text-[10px] tracking-[.18em] text-muted uppercase mb-4 font-heading">Total Cost Comparison
+                    </p>
+                    <canvas id="doughnutChart"></canvas>
+                </div>
+            </div>
+
+            <!-- ── COMPARISON TABLE ──────────────────────────────────────── -->
+            <div class="overflow-x-auto bg-surface border border-border rounded-xl shadow-sm animate-fadeInUp"
+                style="animation-delay:.4s">
+                <table class="w-full text-sm font-data border-collapse">
+                    <thead>
+                        <tr class="text-muted border-b border-border text-[10px] tracking-[.15em] uppercase">
+                            <th class="py-3 px-3 text-left">Provider</th>
+                            <th class="py-3 px-3 text-left">Tier</th>
+                            <th class="py-3 px-3 text-right">Storage</th>
+                            <th class="py-3 px-3 text-right">Compute</th>
+                            <th class="py-3 px-3 text-right">Transfer</th>
+                            <th class="py-3 px-3 text-right">Total</th>
+                            <th class="py-3 px-3 text-right">vs Cheapest</th>
+                        </tr>
+                    </thead>
+                    <tbody id="compTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </div><!-- /container -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                          JAVASCRIPT                               -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+        (function () {
+            "use strict";
+
+            // ── Pricing mirrored from backend ────────────────────────────────
+            const PRICES = {
+                aws: { compute: 0.0416, transfer: 0.09 },
+                azure: { compute: 0.0380, transfer: 0.087 },
+                gcp: { compute: 0.0350, transfer: 0.12 },
+            };
+
+            const STORAGE_TIERS = {
+                aws: [
+                    { id: "standard", label: "Standard", rate: 0.023 },
+                    { id: "infrequent_access", label: "Infrequent Access", rate: 0.0125 },
+                    { id: "glacier", label: "Glacier", rate: 0.004 },
+                ],
+                azure: [
+                    { id: "hot", label: "Hot", rate: 0.0184 },
+                    { id: "cool", label: "Cool", rate: 0.010 },
+                    { id: "archive", label: "Archive", rate: 0.002 },
+                ],
+                gcp: [
+                    { id: "standard", label: "Standard", rate: 0.020 },
+                    { id: "nearline", label: "Nearline", rate: 0.010 },
+                    { id: "coldline", label: "Coldline", rate: 0.007 },
+                    { id: "archive", label: "Archive", rate: 0.004 },
+                ],
+            };
+
+            // ── DOM refs ──────────────────────────────────────────────────────
+            const storageInput = document.getElementById("storageInput");
+            const computeInput = document.getElementById("computeInput");
+            const transferInput = document.getElementById("transferInput");
+            const tierSelect = document.getElementById("storageTier");
+            const calcBtn = document.getElementById("calcBtn");
+            const resultsEl = document.getElementById("results");
+            const providerBtns = document.querySelectorAll(".provider-btn");
+            const priorityBtns = document.querySelectorAll(".priority-btn");
+
+            let selectedProvider = "aws";
+            let selectedPriority = "balanced";
+            let barChart = null;
+            let doughnutChart = null;
+
+            // ── Provider toggle ──────────────────────────────────────────────
+            providerBtns.forEach(btn => {
+                btn.addEventListener("click", () => {
+                    selectedProvider = btn.dataset.provider;
+                    toggleBtnGroup(providerBtns, btn);
+                    populateTiers();
+                    updateFormulas();
+                });
+            });
+
+            // ── Priority toggle ──────────────────────────────────────────────
+            priorityBtns.forEach(btn => {
+                btn.addEventListener("click", () => {
+                    selectedPriority = btn.dataset.priority;
+                    toggleBtnGroup(priorityBtns, btn);
+                });
+            });
+
+            function toggleBtnGroup(btns, active) {
+                btns.forEach(b => {
+                    const on = b === active;
+                    b.classList.toggle("border-accent", on);
+                    b.classList.toggle("text-accent", on);
+                    b.classList.toggle("glow-btn", on);
+                    b.classList.toggle("bg-accentLight", on);
+                    b.classList.toggle("selected", on);
+                    b.classList.toggle("border-gray-300", !on);
+                    b.classList.toggle("text-gray-500", !on);
+                    b.classList.toggle("bg-gray-50", !on);
+                });
+            }
+
+            // ── Tier dropdown ────────────────────────────────────────────────
+            function populateTiers() {
+                const tiers = STORAGE_TIERS[selectedProvider];
+                tierSelect.innerHTML = tiers.map(t =>
+                    `<option value="${t.id}">▸ ${t.label} — $${t.rate.toFixed(4)}/GB</option>`
+                ).join("");
+            }
+            populateTiers();
+            tierSelect.addEventListener("change", updateFormulas);
+
+            // ── Live formula update ──────────────────────────────────────────
+            function getSelectedTierRate() {
+                const tiers = STORAGE_TIERS[selectedProvider];
+                const sel = tiers.find(t => t.id === tierSelect.value);
+                return sel ? sel.rate : tiers[0].rate;
+            }
+
+            function updateFormulas() {
+                const storageRate = getSelectedTierRate();
+                const p = PRICES[selectedProvider];
+                const s = parseFloat(storageInput.value) || 0;
+                const c = parseFloat(computeInput.value) || 0;
+                const t = parseFloat(transferInput.value) || 0;
+
+                setFormula("storageFormula", "GB", storageRate, s);
+                setFormula("computeFormula", "hrs", p.compute, c);
+                setFormula("transferFormula", "GB", p.transfer, t);
+            }
+
+            function setFormula(id, unit, rate, val) {
+                const cost = (val * rate).toFixed(2);
+                document.getElementById(id).innerHTML =
+                    `${unit} × $${rate.toFixed(4)} = <span class="text-accent font-semibold">$${cost}</span>`;
+            }
+
+            [storageInput, computeInput, transferInput].forEach(i =>
+                i.addEventListener("input", updateFormulas)
+            );
+
+            // ── Validation ───────────────────────────────────────────────────
+            function validate() {
+                let ok = true;
+                [storageInput, computeInput, transferInput].forEach(inp => {
+                    const v = parseFloat(inp.value);
+                    if (inp.value.trim() === "" || isNaN(v) || v < 0) {
+                        inp.classList.add("error"); ok = false;
+                    } else {
+                        inp.classList.remove("error");
+                    }
+                });
+                return ok;
+            }
+
+            [storageInput, computeInput, transferInput].forEach(i =>
+                i.addEventListener("input", () => i.classList.remove("error"))
+            );
+
+            // ── Calculate ────────────────────────────────────────────────────
+            calcBtn.addEventListener("click", async () => {
+                if (!validate()) return;
+
+                calcBtn.disabled = true;
+                calcBtn.innerHTML = '<span class="spinner"></span>';
+
+                try {
+                    const res = await fetch("/calculate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            provider: selectedProvider,
+                            storage_gb: parseFloat(storageInput.value) || 0,
+                            compute_hours: parseFloat(computeInput.value) || 0,
+                            transfer_gb: parseFloat(transferInput.value) || 0,
+                            storage_tier: tierSelect.value,
+                            priority: selectedPriority,
+                        }),
+                    });
+                    const data = await res.json();
+                    renderResults(data);
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    calcBtn.disabled = false;
+                    calcBtn.textContent = "CALCULATE COSTS →";
+                }
+            });
+
+            // ── Render results ───────────────────────────────────────────────
+            function $(id) { return document.getElementById(id); }
+            function money(v) { return "$" + Number(v).toFixed(2); }
+
+            const PRIORITY_LABELS = {
+                balanced: "",
+                storage: " — STORAGE HEAVY WORKLOAD",
+                compute: " — COMPUTE HEAVY WORKLOAD",
+            };
+
+            function renderResults(data) {
+                resultsEl.classList.remove("hidden");
+
+                // Heading
+                const priorityLabel = PRIORITY_LABELS[data.priority] || "";
+                $("resultsHeading").innerHTML =
+                    `Cost Breakdown — <span class="text-accent">${data.provider}</span>${priorityLabel}`;
+
+                // Selected provider breakdown
+                $("resStorage").textContent = money(data.storage_cost);
+                $("resCompute").textContent = money(data.compute_cost);
+                $("resTransfer").textContent = money(data.transfer_cost);
+                $("resTotal").textContent = money(data.total_cost);
+
+                // Tier badge
+                $("tierBadge").textContent = data.tier_label || "";
+
+                // Highlight logic
+                const cardStorage = $("cardStorage");
+                const cardCompute = $("cardCompute");
+                [cardStorage, cardCompute].forEach(c => c.classList.remove("highlight-card"));
+
+                const reco = data.recommendation || {};
+                if (reco.highlight === "storage" && reco.warning) {
+                    cardStorage.classList.add("highlight-card");
+                } else if (reco.highlight === "compute" && reco.warning) {
+                    cardCompute.classList.add("highlight-card");
+                }
+
+                // Recommendation
+                $("recoText").textContent = reco.text || "";
+                const savingsEl = $("recoSavings");
+                if (reco.savings) {
+                    savingsEl.textContent = reco.savings.text;
+                    savingsEl.classList.remove("hidden");
+                } else {
+                    savingsEl.classList.add("hidden");
+                }
+
+                // Re-trigger fade animations
+                resultsEl.querySelectorAll(".animate-fadeInUp").forEach(el => {
+                    el.style.animation = "none";
+                    void el.offsetHeight;
+                    el.style.animation = "";
+                });
+
+                renderCharts(data.all_providers);
+                renderTable(data.all_providers);
+                resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+
+            // ── Charts ───────────────────────────────────────────────────────
+            const PROVIDER_COLORS = {
+                AWS: "#FF9900",
+                Azure: "#0089D6",
+                GCP: "#4285F4",
+            };
+
+            function renderCharts(all) {
+                const labels = Object.keys(all);
+                const storageData = labels.map(l => all[l].storage);
+                const computeData = labels.map(l => all[l].compute);
+                const transferData = labels.map(l => all[l].transfer);
+                const totals = labels.map(l => all[l].total);
+
+                // Bar Chart
+                if (barChart) barChart.destroy();
+                barChart = new Chart($("barChart"), {
+                    type: "bar",
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: "Storage", data: storageData, backgroundColor: "rgba(59,130,246,.65)", borderColor: "rgba(59,130,246,1)", borderWidth: 1 },
+                            { label: "Compute", data: computeData, backgroundColor: "rgba(0,119,255,.45)", borderColor: "rgba(0,119,255,1)", borderWidth: 1 },
+                            { label: "Transfer", data: transferData, backgroundColor: "rgba(251,146,60,.6)", borderColor: "rgba(251,146,60,1)", borderWidth: 1 },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        animation: { duration: 700, easing: "easeOutQuart" },
+                        plugins: {
+                            legend: { labels: { color: "#6b7a8d", font: { family: "'IBM Plex Mono'", size: 11 } } },
+                        },
+                        scales: {
+                            x: { ticks: { color: "#6b7a8d", font: { family: "'IBM Plex Mono'", size: 11 } }, grid: { color: "#edf0f4" } },
+                            y: { ticks: { color: "#6b7a8d", font: { family: "'IBM Plex Mono'", size: 11 }, callback: v => "$" + v.toFixed(2) }, grid: { color: "#edf0f4" } },
+                        },
+                    },
+                });
+
+                // Doughnut Chart
+                const cheapest = labels.reduce((a, b) => all[a].total <= all[b].total ? a : b);
+                if (doughnutChart) doughnutChart.destroy();
+                doughnutChart = new Chart($("doughnutChart"), {
+                    type: "doughnut",
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: totals,
+                            backgroundColor: labels.map(l => PROVIDER_COLORS[l] + "cc"),
+                            borderColor: labels.map(l => PROVIDER_COLORS[l]),
+                            borderWidth: 2,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        cutout: "62%",
+                        animation: { duration: 700, easing: "easeOutQuart" },
+                        plugins: {
+                            legend: { labels: { color: "#6b7a8d", font: { family: "'IBM Plex Mono'", size: 11 } } },
+                        },
+                    },
+                    plugins: [{
+                        id: "centerText",
+                        afterDraw(chart) {
+                            const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                            const cx = (left + right) / 2, cy = (top + bottom) / 2;
+                            ctx.save();
+                            ctx.textAlign = "center";
+                            ctx.textBaseline = "middle";
+                            ctx.fillStyle = "#6b7a8d";
+                            ctx.font = '11px "IBM Plex Mono"';
+                            ctx.fillText("CHEAPEST", cx, cy - 10);
+                            ctx.fillStyle = "#0077ff";
+                            ctx.font = 'bold 16px "Space Mono"';
+                            ctx.fillText(cheapest, cx, cy + 12);
+                            ctx.restore();
+                        },
+                    }],
+                });
+            }
+
+            // ── Comparison Table ─────────────────────────────────────────────
+            function renderTable(all) {
+                const tbody = $("compTable");
+                const labels = Object.keys(all);
+                const minTotal = Math.min(...labels.map(l => all[l].total));
+                const cheapestLabel = labels.find(l => all[l].total === minTotal);
+
+                tbody.innerHTML = labels.map(l => {
+                    const d = all[l];
+                    const isCheap = l === cheapestLabel;
+                    const pct = minTotal === 0
+                        ? (d.total === 0 ? "—" : "+∞%")
+                        : isCheap
+                            ? '<span class="text-successGreen font-semibold">Cheapest ✓</span>'
+                            : '<span class="text-warnRed">+' + (((d.total - minTotal) / minTotal) * 100).toFixed(1) + "%</span>";
+
+                    const borderCls = isCheap ? "border-l-[3px] border-l-accent" : "";
+                    const bgCls = isCheap ? "bg-accentLight/50" : "";
+                    const provColor = `color:${PROVIDER_COLORS[l]}`;
+
+                    return `<tr class="border-b border-border/50 hover:bg-surfaceAlt transition-colors ${borderCls} ${bgCls}">
+                <td class="py-3 px-3 font-semibold" style="${provColor}">${l}</td>
+                <td class="py-3 px-3 text-muted text-xs">${d.tier_label || "Standard"}</td>
+                <td class="py-3 px-3 text-right text-textBody">${money(d.storage)}</td>
+                <td class="py-3 px-3 text-right text-textBody">${money(d.compute)}</td>
+                <td class="py-3 px-3 text-right text-textBody">${money(d.transfer)}</td>
+                <td class="py-3 px-3 text-right font-semibold text-textHeading">${money(d.total)}</td>
+                <td class="py-3 px-3 text-right">${pct}</td>
+            </tr>`;
+                }).join("");
+            }
+
+            // init
+            updateFormulas();
+        })();
+    </script>
+</body>
+
+</html>
